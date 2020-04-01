@@ -1,0 +1,272 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pacman)
+p_load(dplyr,table1,ggplot2, GGally, MASS, kableExtra, grid, gridExtra, klaR)
+# library(arsenal)
+# library(caret)
+# library(dplyr)      # for data manipulation
+# library(ggplot2)    # for visualization
+# library(AER)        # for data
+# library(table1)     # for Table 1
+# library(kableExtra) # for tables
+# library(DescTools)
+```
+# Dataset 1 - Two Sample T-Test and Linear Discrimant Matrix
+
+## Introduction
+
+In this report, we analyse the annual financial data collected for bankrupt firms approximately 2 years prior to their bankruptcy and for financially sound firms at about the same time. We aim to perfor Linear discriminat analysis for classifying firms into bankruptcy or nonbankrupcy. Also we would perform a two-sample t-test to see if there is a significant difference in the mean of bankrupt and non-bankrupt firms. The source of the dataset is from Applied Multivariate Statistical Analysis, 5th Edition as T11_04.DAT
+
+
+## Summary
+
+In our dataset we have 46 firms with 21 being bakrupt and 25 being no bankrupt. The dataset has four variables, $X_1$ = (cash flow)/ (total debt),$X_2$  = NI/TA =(net income)j(total assets), $X_3$ = CA/CL =(current assets)/(current liabilities), and $X_4$  = CA/NS =(current assets)/(net sales). From the summary plot, we see that x2 and x1 are highly correlated and likewise x2 and x3. The distributions of the variables are largely normal. For x1 and x4, both population have similar distibution while for x2 and x3, the distributions are unequal.
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+bankruptcy <- read.table("T11-4.DAT")
+colnames(bankruptcy) <- c("x1","x2", "x3", "x4","population")
+label(bankruptcy$x1) = "CF/TD"
+label(bankruptcy$x2) = "NI/TA"
+label(bankruptcy$x3) <- "CA/CL"
+label(bankruptcy$x4) <- "CA/NS"
+label(bankruptcy$population) <- "Population"
+
+attach(bankruptcy)
+bankruptcy$population = factor(bankruptcy$population)
+bankruptcy$x1 = as.numeric(bankruptcy$x1)
+bankruptcy$x2 = as.numeric(bankruptcy$x2)
+bankruptcy$x3 = as.numeric(bankruptcy$x3)
+bankruptcy$x4 = as.numeric(bankruptcy$x4)
+## Plot (x1,x2)
+
+
+ggpairs(bankruptcy[,1:4], aes(color = factor(population)), lower = list(continuous = wrap("smooth", alpha = 0.4, size = 0.3), discrete = "blank", combo="blank"), diag = list(discrete="barDiag", continuous = wrap("densityDiag", alpha=0.5 )), upper = list(combo = wrap("box_no_facet", alpha=0.5), continuous = wrap("cor", size=4, alignPercent=0.8))) + theme(panel.grid.major = element_blank()) + ggtitle("Summary plot for Bankruptcy data")
+
+g2 <- ggplot(bankruptcy, aes(x = x1, y = x2, color = population)) + geom_point() +
+  stat_ellipse(aes(x=x1, y= x2, color= x1),type = "norm") +
+  theme(legend.position='none') +scale_color_manual(values = c("#00AFBB", "#E7B800"))
+# ## Plot (x1,x3)
+g3 <- ggplot(bankruptcy, aes(x = x1, y = x3, color = population)) + geom_point() +
+  stat_ellipse(aes(x=x1, y= x3, color= x1),type = "norm") +
+  theme(legend.position='none') +scale_color_manual(values = c("#00AFBB", "#E7B800"))
+# ## Plot (x1,x4)
+g4 <- ggplot(bankruptcy, aes(x = x1, y = x4, color = population)) + geom_point() +
+  stat_ellipse(aes(x=x1, y= x4, color= x1),type = "norm") +
+  theme(legend.position='none') +scale_color_manual(values = c("#00AFBB", "#E7B800"))
+# 
+grid.arrange(g2,g3,g4, nrow = 2, ncol=2)
+
+```
+
+## Analysis
+
+First, we plot the data for pairs of observations (x1, x2), (x1,x3), (x1,x4). From the plot, we see that the shaps in each plots are fairly elliptical. Thus, we can assume the variables follow bivariate normal distibution. For this analysi, we performed LDA of two sets of variable at a time with equal prior. We label the bankrupt population as Group 1 and the nonbankrupt population as Group 2
+
+### LDA Analysis
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE, include=FALSE}
+lda.obj <- lda(population ~ x1+ x2,data=bankruptcy,prior=c(1,1)/2)
+
+plda <- predict(object=lda.obj,newdata=bankruptcy)
+
+# # Confusion matrix
+table(population,plda$class)
+# 
+# #plot the decision line
+gmean <- lda.obj$prior %*% lda.obj$means
+
+const <- as.numeric(gmean %*%lda.obj$scaling)
+
+slope <- - lda.obj$scaling[1] / lda.obj$scaling[2]
+
+intercept <- const / lda.obj$scaling[2]
+# 
+
+par(mfrow = c(2,1))
+# #Plot decision boundary
+plot(bankruptcy[,1:2],pch=rep(c(18,20),each=50),col=rep(c(2,4),each=50))
+
+abline(intercept, slope)
+#legend("topright",legend=c("Alaskan","Canadian"),pch=c(18,20),col=c(2,4))
+partimat(population~.,data = bankruptcy,method="lda",  main = "LDA Partition Plot")
+
+```
+
+
+1) x1 and x2: We presnt the result below. The model has 0.239 as the apparent error rate (APER)
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+x1_col<- c(-0.069,0.235,3.271)
+x2_col <- c(-0.081,0.055,3.367)
+ldamat = data.frame(matrix(cbind(x1_col, x2_col), nrow = 3, ncol = 2))
+colnames(ldamat) = c("x1","x2")
+rownames(ldamat) = c("Group 1 mean", "Group 2 mean","LDA coefficients")
+kable(ldamat, digits = 4, format = "pandoc", caption = "Table 1: LDA for x1 and x2") 
+```
+
+2) x1 and x3: We presnt the result below. The model has 0.13 as the apparent error rate (APER)
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+x1_col<- c(-0.069,0.235,2.664)
+x3_col <- c(1.3661,2.5936,0.8156)
+ldamat = data.frame(matrix(cbind(x1_col, x2_col), nrow = 3, ncol = 2))
+colnames(ldamat) = c("x1","x3")
+rownames(ldamat) = c("Group 1 mean", "Group 2 mean","LDA coefficients")
+kable(ldamat, digits = 4, format = "pandoc", caption = "Table 2: LDA for x1 and x3 ") 
+```
+
+3) x1 and x4: We presnt the result below. The model has 0.196 as the apparent error rate (APER)
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+x1_col<- c(-0.069,0.235,4.6773)
+x4_col <- c(0.4376,0.4268,0.01965)
+ldamat = data.frame(matrix(cbind(x1_col, x2_col), nrow = 3, ncol = 2))
+colnames(ldamat) = c("x1","x4")
+rownames(ldamat) = c("Group 1 mean", "Group 2 mean","LDA coefficients")
+kable(ldamat, digits = 4, format = "pandoc", caption = "Table 3: LDA for x1 and x4") 
+```
+
+4) x2 and x3: We presnt the result below. The model has 0.13 as the apparent error rate (APER)
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+x2_col <- c(-0.081,0.055,5.496)
+x3_col <- c(1.3661,2.5936,0.8896)
+ldamat = data.frame(matrix(cbind(x1_col, x2_col), nrow = 3, ncol = 2))
+colnames(ldamat) = c("x1","x4")
+rownames(ldamat) = c("Group 1 mean", "Group 2 mean","LDA coefficients")
+kable(ldamat, digits = 4, format = "pandoc", caption = "Table 4: LDA for x2 and x3") 
+```
+
+5) x2 and x4: We presnt the result below. The model has 0.239 as the apparent error rate (APER)
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+x2_col <- c(-0.081,0.055,9.62999)
+x4_col <- c(0.4376,0.4268,-0.6980)
+ldamat = data.frame(matrix(cbind(x1_col, x2_col), nrow = 3, ncol = 2))
+colnames(ldamat) = c("x2","x4")
+rownames(ldamat) = c("Group 1 mean", "Group 2 mean","LDA coefficients")
+kable(ldamat, digits = 4, format = "pandoc", caption = "Table 5: LDA for x2 and x4") 
+```
+
+6) x3 and x4: We presnt the result below. The model has 0.109 as the apparent error rate (APER)
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+x3_col <- c(1.3661,2.5936,1.27450)
+x4_col <- c(0.4376,0.4268,-1.400)
+ldamat = data.frame(matrix(cbind(x3_col, x4_col), nrow = 3, ncol = 2))
+colnames(ldamat) = c("x3","x4")
+rownames(ldamat) = c("Group 1 mean", "Group 2 mean","LDA coefficients")
+kable(ldamat, digits = 4, format = "pandoc", caption = "Table 6: LDA for x3 and x4") 
+```
+
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+partimat(population~.,data = bankruptcy,method="lda",  main = "LDA Partition Plot")
+```
+
+7) We now consider the model with variable x1, x2, x3, and x4.
+
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+x1_col<- c(-0.069,0.235,0.66124)
+x2_col <- c(-0.081,0.055,4.3935)
+x3_col <- c(1.3661,2.5936,0.887250)
+x4_col <- c(0.4376,0.4268,-1.178500)
+ldamat = data.frame(matrix(cbind(x1_col,x2_col,x3_col, x4_col), nrow = 3, ncol = 4))
+colnames(ldamat) = c("x1","x2","x3","x4")
+rownames(ldamat) = c("Group 1 mean", "Group 2 mean","LDA coefficients")
+kable(ldamat, digits = 4, format = "pandoc", caption = "Table 6: LDA for x1, x2, x3 and x4") 
+```
+### T-test analysis
+
+
+For the two sample t-test analysis, we consider just only two variables. x3 and x4 were the two chosen variables due to correlation found the summary section.
+
+We  test for the hypothesis $H_0: \mu_1 = \mu_2$ vs $H_a: \mu_1 \neq  \mu_2$ 
+
+We the reject the null hypothesis since the test statistic is greater than the critical value.(ie $28.45 > 11.17$) 
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+##Two sample 
+
+bankrupt<- bankruptcy[bankruptcy$population == "0",-c(1,2,5)]
+nonbankrupt <-bankruptcy[bankruptcy$population == "1",-c(1,2,5)]
+
+# bankrupt <- iris[iris$Species == "setosa",-c(3,4,5)]
+# nonbankrupt <- iris[iris$Species == "versicolor",-c(3,4,5)]
+
+# now we perform the two-sample Hotelling T^2-test
+n<-c(dim(bankrupt)[1],dim(nonbankrupt)[1])
+p<- dim(bankruptcy)[2] - 1
+xmean1<-colMeans(bankrupt)
+xmean2<-colMeans(nonbankrupt)
+d<-xmean1-xmean2
+S1<-var(bankrupt)
+S2<-var(nonbankrupt)
+Sp<-((n[1]-1)*S1+(n[2]-1)*S2)/(sum(n)-2)
+t2 <- t(d)%*%solve(sum(1/n)*Sp)%*%d
+
+
+alpha<-0.05
+cval <- (sum(n)-2)*p/(sum(n)-p-1)*qf(1-alpha,p,sum(n)-p-1)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+# Confidence Region
+es<-eigen(sum(1/n)*Sp)
+e1<-es$vec %*% diag(sqrt(es$val))
+r1<-sqrt(cval)
+theta<-seq(0,2*pi,len=250)
+v1<-cbind(r1*cos(theta), r1*sin(theta))
+pts<-t(d-(e1%*%t(v1)))
+plot(pts,type="l",main="Confidence Region for Bivariate Normal",xlab="CF/TD",ylab="NI/TA",asp=1)
+segments(0,d[2],d[1],d[2],lty=2) # highlight the center
+segments(d[1],0,d[1],d[2],lty=2)
+
+th2<-c(0,pi/2,pi,3*pi/2,2*pi)   #adding the axis
+v2<-cbind(r1*cos(th2), r1*sin(th2))
+pts2<-t(d-(e1%*%t(v2)))
+segments(pts2[3,1],pts2[3,2],pts2[1,1],pts2[1,2],lty=3)
+segments(pts2[2,1],pts2[2,2],pts2[4,1],pts2[4,2],lty=3)
+
+```
+Since we reject the null hypothesis, we  use simultaneous confidence intervals
+ to check the significant components.
+ 
+ For x3: $[-2.021, -0.4323]$
+ For x4: $[-0.173,  0.1949]$
+ 
+Then we compute the Bonferroni simultaneous confidence intervals:
+
+For x3: $[-1.8464, -0.6074]$
+For x4: $[-0.1326,  0.154]$
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+# since we reject the null, we use the simultaneous confidence intervals
+# to check the significant components
+
+# simultaneous confidence intervals
+wd<-sqrt(cval*diag(Sp)*sum(1/n))
+Cis<-cbind(d-wd,d+wd)
+
+
+
+
+#Bonferroni simultaneous confidence intervals
+wd.b<- qt(1-alpha/(2*p),n[1]+n[2]-2) *sqrt(diag(Sp)*sum(1/n))
+Cis.b<-cbind(d-wd.b,d+wd.b)
+
+
+
+# both component-wise simultaneous confidence intervals do not contain 0, so they have significant differences. 
+```
+
+## Conclusion
+
+In our LDA, we computed discriminant function for all possible combinations of two variables. We notice that the LDA model with x3 and x4 has the best apparent error rate of all with 0.109. In the two sample T-test analysis, we used reduce our dataset to just two variables x3 and x4. We tested for equality of means and reject the hypothesis that the means for the bankrupt and nonbankrupt group have the same mean. We also compute the simultaneous confidence intervals to investigate where the difference lies.

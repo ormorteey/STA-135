@@ -1,0 +1,331 @@
+---
+geometry: margin=2cm
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pacman)
+p_load(caret, GGally, kableExtra, dplyr, ellipse, gridExtra, grid)
+```
+
+# Dataset 3 - Multiple Linear Regression
+
+## Introduction
+
+Every year, Forbes, a global business company collects data from publicly listed companies and in turn provide useful indicator (ranking) of which comapnies are the leading public companies. The forbes Global 2000 annual ranking provides ranking index based on four metrics. These metrics are sales, profit, assets and market value. Our aim in this analysis is to formulate a multiple linear regression model based on year 2005 Forbes data in order to predic profits of companies given their asset and sales numbers. The source of the dataset is from Applied Multivariate Statistical Analysis, 5th Edition.
+
+## Summary
+
+The dataset consist of the top 10 publicly listed companies according to the Forbes ranking. These companies are Citigroup, General Electric, American Intl Group, Bank of America, HSBC Group, Exxon Mobil, Royal Dutch Shell, BP, ING Group, and Toyota. There are no missing values in the dataset. Our response variable is Profit, while the predictors are assets and sales.
+
+
+```{r echo=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+
+company <- c("Citigroup", "General Electric", "American Intl Group", "Bank of America", "HSBC Group", "Exxon Mobil", "Royal Dutch/ Shell", "BP", "ING Group", " Toyota")
+
+sales <- c(108.28,152.36,95.04,65.45,62.97,263.99,265.19,285.06,92.01,165.68)
+
+profits <- c(17.05,16.59,10.91,14.14,9.52,25.33,18.54,15.73,8.10,11.13)
+
+assets <- c(1484.10,750.33,766.42,1110.46,1031.29,195.26,193.83,191.11,1175.16,211.15)
+
+forbes <-  as.data.frame(matrix(cbind( sales, profits, assets), nrow = 10, ncol = 3))
+colnames(forbes) <- c( "sales", "profits", "assets")
+forbes$company <- company
+forbes$sales <- as.numeric(forbes$sales)
+forbes$profits <- as.numeric(forbes$profits)
+forbes$assets <- as.numeric(forbes$assets)
+```
+```{r echo=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+forbes_summary <- summary(forbes[,1:3])
+sales_sum <- c(62.97,92.77,130.32,155.60,239.41,
+285.06)
+profits_sum <- c(8.10,10.96,14.94,14.70,16.93,25.33)
+assets_sum <- c(191.1,199.2,758.4,710.9,1090.7,1484.1)
+five_forbes_summary <- as.data.frame(cbind(sales_sum,profits_sum,assets_sum ))
+colnames(five_forbes_summary) = c("Sales","Profits","Assets")
+rownames(five_forbes_summary) = c("Minimum", "1st Quartile", "Median", "Mean", "3rd Quartile", "Max")
+kable(five_forbes_summary, format = "pandoc", caption = "Summary Statistics for Forbes Dataset")
+
+layout(matrix(c(1,1, 2, 3), nrow = 2, ncol = 2, byrow = TRUE))
+
+ggpairs(forbes[,1:3], lower = list(continuous = wrap("smooth", alpha = 0.4, size = 0.3), discrete = "blank", combo="blank"), diag = list(discrete="barDiag", continuous = wrap("densityDiag", alpha=0.5 )), upper = list(combo = wrap("box_no_facet", alpha=0.5), continuous = wrap("cor", size=4, alignPercent=0.8))) + theme(panel.grid.major = element_blank()) + ggtitle("Figure 1")
+
+ggplot(forbes, aes( company, sales, color = company)) + geom_point() + theme( axis.text.x = element_blank(), axis.ticks = element_blank()) +ggtitle("Figure 2")
+ggplot(forbes, aes( company, profits, color = company)) + geom_point() + theme( axis.text.x = element_blank(), axis.ticks = element_blank()) + ggtitle("Figure 3")
+
+# lay <- c(1,2)  
+# grid.arrange(grobs=lapply(list(g2,g3),grobTree), layout_matrix = lay)
+```
+
+From Figure 1, we observe that the both assets and sales are somewhat strongly correlated. Profit is negatively correlated with assets and positively correlated with sales. From Figure 2, we observe that BP has the highest sales value and HSBC group has the lowest. Also from Figure 2, we see that Exxon Mobil has the highest profit margin while ING group has the least profit margin. 
+
+
+## Analysis
+We are interested in predicting profit of ranked companies on the 2005 Forbes annual rankings.
+
+The following model was chosen:
+
+$\sf{Y}$ = $\sf{X\beta}$ 
+
+
+where: 
+
+$\sf{y_{ij}}$ is profit variable
+$X$ is design matrix with $\sf{X_{1}}$ as assest and $\sf{X_{2}}$ as Sales
+
+$\sf{\epsilon_{ij}}$  is the error term
+
+
+The validity of the assumptions for a muitiple linear regression is checked in Figure 4. We could see that the normality assumption is satisfied. For homoskedacity, the number of obsevation is somewhat too small to effectively jusge deviations. So we would assume we can fit a linear regression.
+
+
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+model <- lm(profits~assets+sales)
+par(mfrow = c(1,2))
+plot(model, which = c(2,1), main = "Figure 4")
+
+Z = matrix(cbind(rep(1, 10), assets,  sales), nrow = 10, ncol = 3)
+
+Y =  matrix(profits, nrow = 10, ncol = 1)
+
+
+n <- length(Y)
+
+r <- dim(Z)[2]-1
+```
+
+We compute the least squares estimate $\hat{\beta}$ = $(X^{t}X)X^tY$
+
+$\hat{\beta}$ = $[ 0.013,0.0058,0.068]^{t}$
+
+```{r echo=FALSE, include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# least square estimates
+beta_hat <- solve(t(Z)%*%Z)%*%t(Z)%*%Y
+```
+We then compute the Coefficient of determination $R^{2}$ = 0.5568. This measures of how well the model preforms on obeservations, based on the proportion of total variation explained by the model.
+```{r echo=FALSE, include=FALSE, message=FALSE, result=FALSE}
+# R^2 statistic
+R_square <- 1 - sum((Y - Z%*%beta_hat)^2)/sum((Y-mean(Y))^2)
+
+```
+Next, we comput the sample variance $\hat{\sigma^2}$.  $\hat{\sigma^2}$ = 14.92
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# sigma_hat_square
+sigma_hat_square <- sum((Y - Z%*%beta_hat)^2)/(n-r-1)
+sigma_hat_square
+```
+
+By computing $\hat{\sigma^2}{{(X^{t}X)}^{-1}}$, we get the covariance matrix:
+
+$$\mathbf{Cov(\hat{\beta})} = \left[\begin{array}
+{rrr}
+58.391 & 0.036 & -0.20\\
+-0.035 & 0.000025 & 0.00012 \\
+-0.20 & 0.00012 & 0.00078
+\end{array}\right]
+$$
+
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE}
+# estimated covariance of hat{beta}
+sigma_hat_square * solve(t(Z)%*%Z)
+```
+
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# t-test for single coefficient
+# H_0: beta_j = 0, H_a: beta_j != 0
+
+j <- 1
+t_stat <- (beta_hat[j+1] - 0)/sqrt(sigma_hat_square * solve(t(Z)%*%Z)[j+1,j+1])
+t_stat
+
+alpha <- 0.05
+cval_t <- qt(1-alpha/2, n-r-1)
+cval_t
+```
+
+We compute the 95% confidence interval for $\beta_{1}$.
+
+$[\beta_{1} - \hat{\sigma^2}\sqrt{\omega_{11}}t_{n-r-1}(\frac{0.05}{2})$ + $\beta_{1} + \hat{\sigma^2}\sqrt{\omega_{11}}t_{n-r-1}(\frac{0.05}{2})]$ = $[-0.00593 , 0.01758 ]$ 
+
+
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# One-at-a-time confidence interval for beta_j
+
+j <- 1
+cat('[',
+    beta_hat[j+1] - qt(1-alpha/2, n-r-1)*sqrt(sigma_hat_square * solve(t(Z)%*%Z)[j+1,j+1]),
+    ',',
+    beta_hat[j+1] + qt(1-alpha/2, n-r-1)*sqrt(sigma_hat_square * solve(t(Z)%*%Z)[j+1,j+1]),
+    ']')
+```
+
+The 95% confidence intervals for $\beta_{j}$, $j$= 0,1,2 based on confidence region are $$[\beta_{j} - \hat{\sigma^2}\sqrt{\omega_{11}}\sqrt{(r+1)F_{r+1,n-r-1}(0.05)}), \beta_{j} + \hat{\sigma^2}\sqrt{\omega_{11}}\sqrt{(r+1)F_{r+1,n-r-1}(0.05)})]$$
+
+$\beta_{0} \in [ -27.5812 , 27.60785\\]$
+$\beta_{1} \in [ -0.0121 , 0.0236 ]\\$
+$\beta_{2} \in [ -0.03251 , 0.1686 ]\\$'
+
+
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# confidence region based simultaneous confidence intervals 
+
+j <- 0
+cat('[',
+    beta_hat[j+1] - sqrt((r+1)*qf(1-alpha, r+1, n-r-1))*sqrt(sigma_hat_square * solve(t(Z)%*%Z)[j+1,j+1]),
+    ',',
+    beta_hat[j+1] + sqrt((r+1)*qf(1-alpha, r+1, n-r-1))*sqrt(sigma_hat_square * solve(t(Z)%*%Z)[j+1,j+1]),
+    ']')
+
+```
+
+The 95% confidence intervals for $\beta_{j}$, $j$= 0,1,2 based on Bonferroni correction are
+ 
+ $$[\beta_{j} - \hat{\sigma^2}\sqrt{\omega_{11}}t_{n-r-1}(\frac{0.05}{2(r+1)})), \beta_{j} + \hat{\sigma^2}\sqrt{\omega_{11}}t_{n-r-1}(\frac{0.05}{2(r+1)}))]$$
+ 
+$\beta_{0} \in [ -23.885 , 23.912]\\$
+$\beta_{1} \in [ -0.0097, 0.0212 ]\\$
+$\beta_{2} \in [ -0.019 , 0.155 ]\\$
+
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# Bonferroni correction based simultaneous confidence intervals
+
+j <- 2
+cat('[',
+    beta_hat[j+1] - qt(1-alpha/(2*(r+1)), n-r-1)*sqrt(sigma_hat_square * solve(t(Z)%*%Z)[j+1,j+1]),
+    ',',
+    beta_hat[j+1] + qt(1-alpha/(2*(r+1)), n-r-1)*sqrt(sigma_hat_square * solve(t(Z)%*%Z)[j+1,j+1]),
+    ']')
+```
+
+
+We test the hypothesis $H_0: \beta_1 =\beta_2 = 0$
+
+Let $$C = \left[\begin{array}
+{rrr}
+0& 1 & 0\\
+0 & 0 & 1
+\end{array}\right]
+$$
+The F-statistic is $\frac{1}{\hat{\sigma}^2}\hat\beta_{(2)}^t\omega_{22}^{-1}\hat\beta_{(2)}$ =  4.737
+
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+
+# F-test
+# H_0: beta_1 = beta_2 = 
+
+C <- matrix(c(0,0,1,0,0,1),2,3)
+
+df_1 <- qr(C)$rank # df_1: rank of matrix R
+
+f_stat <- (t(C%*%beta_hat)%*%solve(C%*%solve(t(Z)%*%Z)%*%t(C))%*%(C%*%beta_hat)/df_1)/sigma_hat_square
+f_stat
+
+cval_f <- qf(1-alpha, 2, n-r-1)
+cval_f
+```
+The critical value is $(r-q)F_{r-q,n-r-1}(\alpha)$ = $2F_{2,7}(0.5)$ = 9.474.
+
+Since 4.737 is not greater than 9.474, we do not reject $H_0$
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# (equivalent) F-test by comparing residuals
+
+# fit the reduced model
+beta_hat_reduced <- solve(t(Z[,1])%*%Z[,1])%*%t(Z[,1])%*%Y
+beta_hat_reduced
+
+f_stat_reduced <- ((sum((Y - Z[,1]%*%beta_hat_reduced)^2) - sum((Y - Z%*%beta_hat)^2))/2)/sigma_hat_square
+f_stat_reduced
+
+# confidence interval for z_0^T beta
+
+z_0 <- c(1, 50, 50)
+
+cat('[',
+    z_0%*%beta_hat - sqrt(sigma_hat_square)*sqrt(t(z_0)%*%solve(t(Z)%*%Z)%*%z_0)*qt(1-alpha/2, n-r-1),
+    ',',
+    z_0%*%beta_hat + sqrt(sigma_hat_square)*sqrt(t(z_0)%*%solve(t(Z)%*%Z)%*%z_0)*qt(1-alpha/2, n-r-1),
+    ']')
+```
+Suppose $x_0$ =  $$C = \left[\begin{array}
+{rrr}
+1\\
+50 \\
+50
+\end{array}\right]
+$$
+The result is $[ -10.694 , 18.10324 ]$
+```{r echo=FALSE,include=FALSE, message=FALSE, result=FALSE,warning= FALSE}
+# prediction interval for Y_0 = z_0^T beta + epsilon_0
+
+cat('[',
+    z_0%*%beta_hat - sqrt(sigma_hat_square)*sqrt(1+t(z_0)%*%solve(t(Z)%*%Z)%*%z_0)*qt(1-alpha/2, n-r-1),
+    ',',
+    z_0%*%beta_hat + sqrt(sigma_hat_square)*sqrt(1+t(z_0)%*%solve(t(Z)%*%Z)%*%z_0)*qt(1-alpha/2, n-r-1),
+    ']')
+```
+The prediction interval for $Y_0$ given $z_0$ is given by [ -13.34684 , 20.75607 ]
+
+Below, we plot the confidence region for $[\beta_1, \beta_2]^t$
+
+
+```{r echo=FALSE, message=FALSE, warning= FALSE, result=FALSE}
+# Confidence Region for (beta_1, beta_2)^T
+
+center <- beta_hat[2:3]
+es<-eigen(C%*%solve(t(Z)%*%Z)%*%t(C))
+e1<-es$vec %*% diag(sqrt(es$val))
+r1<-sqrt(df_1*cval_f*sigma_hat_square)
+theta<-seq(0,2*pi,len=250)
+v1<-cbind(r1*cos(theta), r1*sin(theta))
+pts<-t(center - (e1%*%t(v1)))
+
+# par(pty = "s")
+# plot(pts,type="l",main="Confidence Region for (beta_1, beta_2)^T",xlab="beta_1",ylab="beta_2",asp=1,
+#      xlim = c(-0.012,0.023),ylim=c(-0.02,0.17))
+# segments(0,center[2],center[1],center[2],lty=2) # highlight the center
+# segments(center[1],0,center[1],center[2],lty=2)
+# arrows(-0.3,0,0.1,0)
+# arrows(0,-0.1,0,0.05)
+th2<-c(0,pi/2,pi,3*pi/2,2*pi)   #adding the axis
+v2<-cbind(r1*cos(th2), r1*sin(th2))
+pts2<-t(center-(e1%*%t(v2)))
+# segments(pts2[3,1],pts2[3,2],pts2[1,1],pts2[1,2],lty=3)  
+# segments(pts2[2,1],pts2[2,2],pts2[4,1],pts2[4,2],lty=3)
+
+seg_df <- data.frame(x=c(0,center[1],pts2[3,1],pts2[2,1]),
+                     y=c(center[2],center[1],pts2[3,2],pts2[2,2]),
+                     xend=c(center[1],center[1],pts2[1,1],pts2[4,1]),
+                     yend=c(center[2],center[2],pts2[1,2],pts2[4,2]))
+
+
+ptsframe <- as.data.frame(pts)
+g1 <- ggplot(ptsframe, aes(x = ptsframe$V1, y = ptsframe$V2)) + geom_point() + geom_segment(data=seg_df, aes(x, y, xend=xend, yend=yend))
+
+# g2 <- plot(ellipse(model, which=c(2,3), level=0.95))
+# par(mfrow = c(2,1))
+
+plot(g1)
+# 
+# plot(ellipse(model, which=c(2,3), level=0.95))
+
+# 
+# g1 <- ggplot(ptsframe, aes(x = ptsframe$V1, y = ptsframe$V2)) + geom_point() +
+#     geom_segment(data = segment, aes(x = x, y = y, xend = x2, yend = y2),
+#                  arrow = arrow(angle = 8,type = "closed",length = unit(0.10, "inches")), 
+#                  size = 0.2, 
+#                  linetype = 1,  
+#                  color = "#cccccc")
+# plot(g1)
+
+``` 
+
+## Conclusion
+
+In analysis, we analyze the top 10 companies in 2005 Forbes annual ranking. We formulated a multiple linear regression model using assets and sales are the predictors and profit as the response variable. We found the least square estimate and found 95% confidence intervals for $\beta_1$, 95% confidence intervals for $\beta_1, \beta_2,$ and $\beta_3$ based on confidence region and Bonferroni correction. We then plotted the confidence region for $[\beta_1,\beta_2]^t$
+
